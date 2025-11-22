@@ -1,0 +1,44 @@
+{
+  "name": "@namastexlabs/pglite-embedded-server",
+  "version": "0.1.0",
+  "description": "Multi-instance PostgreSQL embedded server using PGlite - zero config, auto-port allocation, perfect for development and embedded apps",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "pglite-server": "./bin/pglite-server.js"
+  },
+  "scripts": {
+    "bench": "node tests/benchmarks/runner.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "keywords": [
+    "pglite",
+    "postgresql",
+    "embedded",
+    "database",
+    "wasm",
+    "electron",
+    "development",
+    "multi-instance"
+  ],
+  "author": "Namastex Labs <labs@namastex.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/namastexlabs/pglite-embedded-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/namastexlabs/pglite-embedded-server/issues"
+  },
+  "homepage": "https://github.com/namastexlabs/pglite-embedded-server#readme",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "pglite-server": "^0.1.4"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^11.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
