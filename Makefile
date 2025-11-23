@@ -148,49 +148,54 @@ publish-dry: pre-publish ## Dry-run publish (test without actually publishing)
 	@echo "$(GREEN)✅ Dry-run successful!$(RESET)"
 	@echo "$(YELLOW)To actually publish, run: make publish$(RESET)"
 
-publish: pre-publish ## 🚀 Publish to npm
+publish: check-git check-npm check-files ## 🚀 Publish to npm (auto-bumps version)
 	@echo ""
 	@echo "$(PURPLE)$(BOLD)╔═══════════════════════════════════════════════════╗$(RESET)"
 	@echo "$(PURPLE)$(BOLD)║  📦 Publishing $(PACKAGE_NAME)  ║$(RESET)"
 	@echo "$(PURPLE)$(BOLD)╚═══════════════════════════════════════════════════╝$(RESET)"
 	@echo ""
-	@echo "$(CYAN)Version: v$(VERSION)$(RESET)"
-	@echo "$(CYAN)Package: $(PACKAGE_NAME)$(RESET)"
+	@echo "$(CYAN)Current version: v$(VERSION)$(RESET)"
 	@echo ""
-	@read -p "$(YELLOW)Confirm publish? [y/N] $(RESET)" -n 1 -r; \
+	@echo "$(CYAN)📈 Bumping patch version...$(RESET)"
+	@npm version patch -m "chore: bump version to %s"
+	@NEW_VERSION=$$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/'); \
+	echo "$(GREEN)✅ Version bumped to $$NEW_VERSION$(RESET)"; \
+	echo ""; \
+	echo "$(CYAN)📤 Pushing to GitHub...$(RESET)"; \
+	git push && git push --tags; \
+	echo "$(GREEN)✅ Pushed to GitHub!$(RESET)"; \
+	echo ""; \
+	echo "$(CYAN)Package: $(PACKAGE_NAME)@$$NEW_VERSION$(RESET)"; \
+	echo ""; \
+	read -p "$(YELLOW)Confirm publish? [y/N] $(RESET)" -n 1 -r; \
 	echo; \
 	if [[ ! $$REPLY =~ ^[Yy]$$ ]]; then \
 		echo "$(YELLOW)⚠️  Publish cancelled$(RESET)"; \
 		exit 1; \
-	fi
-	@echo ""
-	@echo "$(CYAN)📦 Publishing to npm...$(RESET)"
-	@npm publish --access public
-	@echo "$(GREEN)✅ Published to npm!$(RESET)"
-	@echo ""
-	@echo "$(CYAN)🏷️  Creating git tag v$(VERSION)...$(RESET)"
-	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
-	@git push origin "v$(VERSION)"
-	@echo "$(GREEN)✅ Git tag created and pushed!$(RESET)"
-	@echo ""
-	@if command -v gh >/dev/null 2>&1; then \
+	fi; \
+	echo ""; \
+	echo "$(CYAN)📦 Publishing to npm...$(RESET)"; \
+	npm publish --access public; \
+	echo "$(GREEN)✅ Published to npm!$(RESET)"; \
+	echo ""; \
+	if command -v gh >/dev/null 2>&1; then \
 		echo "$(CYAN)🎉 Creating GitHub release...$(RESET)"; \
-		gh release create "v$(VERSION)" \
-			--title "v$(VERSION)" \
+		gh release create "v$$NEW_VERSION" \
+			--title "v$$NEW_VERSION" \
 			--notes "Multi-instance PostgreSQL embedded server - See README.md for details" \
 			|| echo "$(YELLOW)⚠️  GitHub release creation failed (may already exist)$(RESET)"; \
 		echo ""; \
-	fi
-	@echo "$(GREEN)$(BOLD)╔═══════════════════════════════════════════════════╗$(RESET)"
-	@echo "$(GREEN)$(BOLD)║  🍾 SUCCESS! Package published!                  ║$(RESET)"
-	@echo "$(GREEN)$(BOLD)╚═══════════════════════════════════════════════════╝$(RESET)"
-	@echo ""
-	@echo "$(CYAN)📦 Install with:$(RESET)"
-	@echo "   npm install -g $(PACKAGE_NAME)"
-	@echo ""
-	@echo "$(CYAN)🔗 View on npm:$(RESET)"
-	@echo "   https://www.npmjs.com/package/$(PACKAGE_NAME)"
-	@echo ""
+	fi; \
+	echo "$(GREEN)$(BOLD)╔═══════════════════════════════════════════════════╗$(RESET)"; \
+	echo "$(GREEN)$(BOLD)║  🍾 SUCCESS! Package published!                  ║$(RESET)"; \
+	echo "$(GREEN)$(BOLD)╚═══════════════════════════════════════════════════╝$(RESET)"; \
+	echo ""; \
+	echo "$(CYAN)📦 Install with:$(RESET)"; \
+	echo "   npm install -g $(PACKAGE_NAME)"; \
+	echo ""; \
+	echo "$(CYAN)🔗 View on npm:$(RESET)"; \
+	echo "   https://www.npmjs.com/package/$(PACKAGE_NAME)"; \
+	echo ""
 
 # ==========================================
 # 🧹 Maintenance
