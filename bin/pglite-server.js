@@ -14,6 +14,21 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  // ExitStatus errors are expected from PGlite WASM cleanup - ignore them
+  if (reason && reason.name === 'ExitStatus') {
+    return;
+  }
+  console.error('❌ Unhandled Promise Rejection:', reason);
+  // Don't exit - log and continue (PM2 will handle restarts if needed)
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
 // Parse CLI arguments
 const args = process.argv.slice(2);
 const command = args[0];

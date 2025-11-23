@@ -160,6 +160,12 @@ export async function startServer({ dataDir, port, logLevel = 'info' }) {
     });
   });
 
+  // Add permanent error handler for server lifetime
+  server.on('error', (error) => {
+    console.error(`⚠️  Server error on port ${port}:`, error.message);
+    // Log but don't crash - PM2 will handle restarts if needed
+  });
+
   // Create lock file
   const lockFile = createLockFile(absoluteDataDir, port, process.pid);
 
@@ -171,20 +177,43 @@ export async function startServer({ dataDir, port, logLevel = 'info' }) {
     console.log(`\n🛑 Shutting down server on port ${port}...`);
 
     try {
+      // Close TCP server
       server.close();
-      await db.close();
-      removeLockFile(absoluteDataDir);
-      unregisterInstance(absoluteDataDir);
-      console.log('✅ Server stopped gracefully');
     } catch (error) {
-      console.error('Error during shutdown:', error);
+      console.error('⚠️  Error closing server:', error.message);
     }
 
+    try {
+      // Close PGlite database (may throw ExitStatus - this is normal for WASM)
+      await db.close();
+    } catch (error) {
+      // ExitStatus errors are expected during WASM cleanup
+      if (error.name !== 'ExitStatus') {
+        console.error('⚠️  Error closing database:', error.message);
+      }
+    }
+
+    try {
+      removeLockFile(absoluteDataDir);
+      unregisterInstance(absoluteDataDir);
+    } catch (error) {
+      console.error('⚠️  Error removing lock/registry:', error.message);
+    }
+
+    console.log('✅ Server stopped gracefully');
     process.exit(0);
   };
 
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  // Wrap async cleanup to handle promise rejections
+  const handleShutdown = () => {
+    cleanup().catch((error) => {
+      console.error('❌ Fatal error during shutdown:', error);
+      process.exit(1);
+    });
+  };
+
+  process.on('SIGINT', handleShutdown);
+  process.on('SIGTERM', handleShutdown);
 
   return {
     server,
