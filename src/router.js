@@ -196,7 +196,8 @@ export class MultiTenantRouter extends EventEmitter {
           handler.detach();
         }
         this.connections.delete(socket);
-        socket.removeAllListeners(); // Prevent memory leaks
+        // Note: Don't call socket.removeAllListeners() here as it removes
+        // the pool's unlock handlers before they can fire, causing stuck locks
       };
 
       socket.once('close', cleanup);

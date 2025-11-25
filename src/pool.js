@@ -28,6 +28,7 @@ class ManagedInstance extends EventEmitter {
     this.db = null;
     this.locked = false;
     this.activeSocket = null;
+    this.lockTimer = null; // Safety timeout for locks
     this.queue = [];
     this.createdAt = Date.now();
     this.lastAccess = Date.now();
@@ -69,8 +70,10 @@ class ManagedInstance extends EventEmitter {
 
   /**
    * Lock instance to a socket
+   * @param {net.Socket} socket - TCP socket to lock to
+   * @param {number} timeout - Safety timeout in ms (default 5 minutes)
    */
-  lock(socket) {
+  lock(socket, timeout = 300000) {
     if (this.locked) {
       throw new Error(`Instance ${this.dbName} is already locked`);
     }
@@ -78,6 +81,12 @@ class ManagedInstance extends EventEmitter {
     this.locked = true;
     this.activeSocket = socket;
     this.lastAccess = Date.now();
+
+    // Safety net: auto-unlock after timeout (prevents permanent locks)
+    this.lockTimer = setTimeout(() => {
+      this.logger.warn({ dbName: this.dbName }, 'Lock timeout - forcing unlock');
+      this.unlock();
+    }, timeout);
 
     // Only attach event listeners if socket is provided
     if (socket) {
@@ -92,6 +101,12 @@ class ManagedInstance extends EventEmitter {
    * Unlock instance (connection closed)
    */
   unlock() {
+    // Clear safety timeout if it exists
+    if (this.lockTimer) {
+      clearTimeout(this.lockTimer);
+      this.lockTimer = null;
+    }
+
     this.locked = false;
     this.activeSocket = null;
     this.lastAccess = Date.now();
