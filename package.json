@@ -1,11 +1,11 @@
 {
-  "name": "@namastexlabs/pglite-embedded-server",
-  "version": "0.1.9",
+  "name": "pgserve",
+  "version": "0.1.0",
   "description": "Multi-instance PostgreSQL embedded server using PGlite - zero config, auto-port allocation, perfect for development and embedded apps",
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "pglite-embedded": "./bin/pglite-server.js"
+    "pgserve": "./bin/pglite-server.js"
   },
   "scripts": {
     "bench": "node tests/benchmarks/runner.js",

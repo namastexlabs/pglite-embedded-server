@@ -15,7 +15,7 @@ BOLD := $(shell tput bold)
 RESET := $(shell tput sgr0)
 
 # Package info
-PACKAGE_NAME := @namastexlabs/pglite-embedded-server
+PACKAGE_NAME := pgserve
 VERSION := $(shell grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
 
 # ==========================================

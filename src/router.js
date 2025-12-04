@@ -24,7 +24,7 @@ import pino from 'pino';
 export class MultiTenantRouter extends EventEmitter {
   constructor(options = {}) {
     super();
-    this.port = options.port || 5432;
+    this.port = options.port || 8432;
     this.host = options.host || '127.0.0.1';
     this.baseDir = options.baseDir || './data';
     this.memoryMode = options.memoryMode || false;

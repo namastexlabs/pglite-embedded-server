@@ -1,4 +1,4 @@
-# @namastexlabs/pglite-embedded-server
+# pgserve
 
 **Multi-tenant PostgreSQL router using PGlite** - Single port, auto-provisioning, zero config.
 
@@ -8,7 +8,7 @@ Perfect for multi-user apps, AI agents, and embedded databases.
 
 - 🎯 **Multi-Tenant** - Single port, multiple isolated databases (one per user/app)
 - 🚀 **Auto-Provisioning** - Databases created on demand from connection string
-- 🔌 **Single Endpoint** - `postgresql://localhost:5432/dbname` routes to correct PGlite instance
+- 🔌 **Single Endpoint** - `postgresql://localhost:8432/dbname` routes to correct PGlite instance
 - ⚡ **High Performance** - MVCC, row-level locking, concurrent writes
 - 🎛️ **Zero Configuration** - Auto-tuned for your hardware (CPU, RAM)
 - 📦 **PostgreSQL Compatible** - Works with any PostgreSQL client (psql, Prisma, pg, etc.)
@@ -36,19 +36,19 @@ Perfect for multi-user apps, AI agents, and embedded databases.
 ### Installation
 
 ```bash
-npm install @namastexlabs/pglite-embedded-server
+npm install pgserve
 # or
-pnpm add @namastexlabs/pglite-embedded-server
+pnpm add pgserve
 ```
 
 ### Multi-Tenant Mode (Recommended)
 
 ```javascript
-import { startMultiTenantServer } from '@namastexlabs/pglite-embedded-server';
+import { startMultiTenantServer } from 'pgserve';
 
 // Start multi-tenant router on single port
 const router = await startMultiTenantServer({
-  port: 5432,           // Single port for all databases
+  port: 8432,           // Single port for all databases
   baseDir: './data',    // Base directory (creates ./data/dbname/ per DB)
   autoProvision: true,  // Auto-create databases (default: true)
   maxInstances: 100,    // Max concurrent databases
@@ -56,8 +56,8 @@ const router = await startMultiTenantServer({
 });
 
 // Clients connect like normal PostgreSQL:
-// postgresql://localhost:5432/user123  → ./data/user123/
-// postgresql://localhost:5432/app456   → ./data/app456/
+// postgresql://localhost:8432/user123  → ./data/user123/
+// postgresql://localhost:8432/app456   → ./data/app456/
 ```
 
 ### Usage with PostgreSQL Clients
@@ -67,7 +67,7 @@ import pg from 'pg';
 
 // Connect to database "user123" (auto-created)
 const client1 = new pg.Client({
-  connectionString: 'postgresql://localhost:5432/user123'
+  connectionString: 'postgresql://localhost:8432/user123'
 });
 
 await client1.connect();
@@ -76,7 +76,7 @@ await client1.query("INSERT INTO users (name) VALUES ('Alice')");
 
 // Connect to database "app456" (different isolated instance)
 const client2 = new pg.Client({
-  connectionString: 'postgresql://localhost:5432/app456'
+  connectionString: 'postgresql://localhost:8432/app456'
 });
 
 await client2.connect();
@@ -95,7 +95,7 @@ datasource db {
 }
 
 // .env
-DATABASE_URL="postgresql://localhost:5432/myapp"
+DATABASE_URL="postgresql://localhost:8432/myapp"
 ```
 
 ```bash
@@ -111,7 +111,7 @@ Start multi-tenant router server.
 
 ```javascript
 const router = await startMultiTenantServer({
-  port: 5432,             // Port to listen on (default: 5432)
+  port: 8432,             // Port to listen on (default: 8432)
   host: '127.0.0.1',      // Host to bind (default: 127.0.0.1)
   baseDir: './data',      // Base data directory (default: './data')
   autoProvision: true,    // Auto-create databases (default: true)
@@ -129,7 +129,7 @@ const router = await startMultiTenantServer({
 // Get router stats
 const stats = router.getStats();
 // {
-//   port: 5432,
+//   port: 8432,
 //   activeConnections: 2,
 //   pool: {
 //     totalInstances: 3,
@@ -154,12 +154,12 @@ await router.stop();
 ### Single Port, Multi-Tenant Routing
 
 ```
-Client 1: postgresql://localhost:5432/user123
-Client 2: postgresql://localhost:5432/app456
-Client 3: postgresql://localhost:5432/tenant789
+Client 1: postgresql://localhost:8432/user123
+Client 2: postgresql://localhost:8432/app456
+Client 3: postgresql://localhost:8432/tenant789
          ↓
 ┌────────────────────────────────────────┐
-│  Multi-Tenant Router (port 5432)       │
+│  Multi-Tenant Router (port 8432)       │
 │  - Parses connection database name     │
 │  - Routes to correct PGlite instance   │
 │  - Auto-provisions new databases       │
@@ -175,7 +175,7 @@ Client 3: postgresql://localhost:5432/tenant789
 
 ### How It Works
 
-1. **Client connects**: `postgresql://localhost:5432/myapp`
+1. **Client connects**: `postgresql://localhost:8432/myapp`
 2. **Router parses** PostgreSQL startup message → extracts database name: `myapp`
 3. **Pool checks** for existing PGlite instance for `myapp`
 4. **Auto-provision** creates `./data/myapp/` if doesn't exist
@@ -210,23 +210,23 @@ Client 3: postgresql://localhost:5432/tenant789
 ### Install Globally
 
 ```bash
-npm install -g @namastexlabs/pglite-embedded-server
+npm install -g pgserve
 ```
 
 ### Commands
 
 ```bash
 # Start multi-tenant router
-pglite-server start-router --port 5432 --dir ./data
+pgserve start --port 8432 --dir ./data
 
 # Check router status
-pglite-server router-stats
+pgserve router-stats
 
 # List all databases
-pglite-server list-databases
+pgserve list-databases
 
 # Stop router
-pglite-server stop-router
+pgserve stop-router
 ```
 
 ## 🛠️ Advanced Usage
@@ -234,7 +234,7 @@ pglite-server stop-router
 ### Custom Instance Pool
 
 ```javascript
-import { InstancePool } from '@namastexlabs/pglite-embedded-server';
+import { InstancePool } from 'pgserve';
 
 const pool = new InstancePool({
   baseDir: './databases',

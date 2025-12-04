@@ -46,17 +46,17 @@ if (command?.startsWith('--') || command === undefined) {
 function printHelp() {
   console.log(`
 ╔═══════════════════════════════════════════════════════════════════╗
-║  PGlite Embedded Server - Multi-Tenant PostgreSQL Router         ║
+║  pgserve - Multi-Tenant PostgreSQL Router using PGlite           ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
 USAGE:
-  pglite-server <command> [options]
+  pgserve <command> [options]
 
 COMMANDS:
   🚀 MULTI-TENANT MODE (Recommended):
 
   router                       Start multi-tenant router (single port, auto-provision)
-    --port <number>            PostgreSQL port (default: 5432)
+    --port <number>            PostgreSQL port (default: 8432)
     --dir <path>               Base directory for databases (default: ./data)
     --max <number>             Max concurrent databases (default: 100)
     --log <level>              Log level: error, warn, info, debug (default: info)
@@ -89,26 +89,26 @@ COMMANDS:
 EXAMPLES:
   🚀 Multi-tenant mode (RECOMMENDED):
 
-  # Start router on default port 5432
-  pglite-server router
+  # Start router on default port 8432
+  pgserve router
 
   # Start on custom port with custom data directory
-  pglite-server router --port 5433 --dir /var/lib/pglite
+  pgserve router --port 8433 --dir /var/lib/pglite
 
   # Connect clients:
-  # postgresql://localhost:5432/user123    → auto-creates ./data/user123/
-  # postgresql://localhost:5432/app456     → auto-creates ./data/app456/
+  # postgresql://localhost:8432/user123    → auto-creates ./data/user123/
+  # postgresql://localhost:8432/app456     → auto-creates ./data/app456/
 
   📦 Legacy mode:
 
   # Start single instance
-  pglite-server start ./data/my-db --port 12000
+  pgserve start ./data/my-db --port 12000
 
   # List instances
-  pglite-server list
+  pgserve list
 
   # Stop all
-  pglite-server stop --all
+  pgserve stop --all
 
 `);
 }
@@ -350,7 +350,7 @@ function cmdCleanup() {
 async function cmdRouter() {
   // Parse options
   const portIndex = args.indexOf('--port');
-  const port = portIndex >= 0 ? parseInt(args[portIndex + 1], 10) : 5432;
+  const port = portIndex >= 0 ? parseInt(args[portIndex + 1], 10) : 8432;
 
   const dirIndex = args.indexOf('--dir');
   const dataDir = dirIndex >= 0 ? args[dirIndex + 1] : './data';

@@ -1,5 +1,5 @@
 /**
- * @namastexlabs/pglite-embedded-server
+ * pgserve - PostgreSQL embedded server using PGlite
  *
  * Multi-tenant PostgreSQL router using PGlite
  * Single port, auto-provisioning, perfect for multi-user apps and AI agents
