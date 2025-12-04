@@ -152,8 +152,8 @@ export class MultiTenantRouter extends EventEmitter {
     // Track connection
     this.connections.add(socket);
 
-    // Resume socket (was paused on connect)
-    socket.resume();
+    // NOTE: Don't resume here - let readStartupMessage() resume after setting up listeners
+    // This prevents race condition where data arrives before listener is attached
 
     let dbName = null;
     let handler = null;

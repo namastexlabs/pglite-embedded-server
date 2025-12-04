@@ -176,6 +176,9 @@ export async function readStartupMessage(socket) {
     socket.on('data', onData);
     socket.on('error', onError);
 
+    // Resume socket AFTER listeners are set up (prevents race condition)
+    socket.resume();
+
     // Timeout after 5 seconds
     setTimeout(() => {
       if (resolved) return;
