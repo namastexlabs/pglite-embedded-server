@@ -1,10 +1,10 @@
 module.exports = {
   apps: [
     {
-      name: 'PGlite Local Server',
+      name: 'pgserve',
       script: './bin/pglite-server.js',
-      args: 'start ./data/genieos-local --port 12000 --log info',
-      cwd: '/home/namastex/dev/pglite-embedded-server',
+      args: 'router --port 8432',
+      cwd: '/home/namastex/dev/pgserve',
       interpreter: 'node',
       instances: 1,
       autorestart: true,

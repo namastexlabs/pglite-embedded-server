@@ -25,12 +25,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/namastexlabs/pglite-embedded-server.git"
+    "url": "https://github.com/namastexlabs/pgserve.git"
   },
   "bugs": {
-    "url": "https://github.com/namastexlabs/pglite-embedded-server/issues"
+    "url": "https://github.com/namastexlabs/pgserve/issues"
   },
-  "homepage": "https://github.com/namastexlabs/pglite-embedded-server#readme",
+  "homepage": "https://github.com/namastexlabs/pgserve#readme",
   "dependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "@electric-sql/pglite-socket": "^0.0.19",

@@ -314,7 +314,7 @@ Built on top of:
 
 ## 📧 Support
 
-- **Issues**: [GitHub Issues](https://github.com/namastexlabs/pglite-embedded-server/issues)
+- **Issues**: [GitHub Issues](https://github.com/namastexlabs/pgserve/issues)
 - **Email**: labs@namastex.com
 - **Website**: [namastex.com](https://namastex.com)
 
