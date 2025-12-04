@@ -11,7 +11,9 @@
  */
 
 const PROTOCOL_VERSION_3 = 196608;
-const SSL_REQUEST_CODE = 80877103; // PostgreSQL SSL negotiation request
+const SSL_REQUEST_CODE = 80877103;    // PostgreSQL SSL negotiation request
+const GSSAPI_REQUEST_CODE = 80877104; // PostgreSQL GSSAPI encryption request
+const CANCEL_REQUEST_CODE = 80877102; // PostgreSQL cancel request
 const DATABASE_KEY = Buffer.from('database\0');
 
 /**
@@ -179,14 +181,14 @@ export async function readStartupMessage(socket) {
     // Resume socket AFTER listeners are set up (prevents race condition)
     socket.resume();
 
-    // Timeout after 5 seconds
+    // Timeout after 2 seconds (reduced from 5s for faster probe connection handling)
     setTimeout(() => {
       if (resolved) return;
       resolved = true;
       socket.removeListener('data', onData);
       socket.removeListener('error', onError);
       reject(new Error('Timeout reading startup message'));
-    }, 5000);
+    }, 2000);
   });
 }
 
@@ -199,7 +201,7 @@ export async function readStartupMessage(socket) {
 export async function extractDatabaseNameFromSocket(socket) {
   let { message, allData } = await readStartupMessage(socket);
 
-  // Check if this is an SSL request
+  // Check if this is a protocol negotiation request (SSL, GSSAPI, Cancel)
   if (message.length >= 8) {
     const version = message.readInt32BE(4);
 
@@ -211,6 +213,18 @@ export async function extractDatabaseNameFromSocket(socket) {
       const result = await readStartupMessage(socket);
       message = result.message;
       allData = result.allData;
+    } else if (version === GSSAPI_REQUEST_CODE) {
+      // Respond with 'N' (no GSSAPI support)
+      socket.write(Buffer.from('N'));
+
+      // Read the actual startup message
+      const result = await readStartupMessage(socket);
+      message = result.message;
+      allData = result.allData;
+    } else if (version === CANCEL_REQUEST_CODE) {
+      // Cancel request - PGlite doesn't support query cancellation
+      // Just close gracefully (cancel requests don't expect a response)
+      throw new Error('Cancel request received (not supported)');
     }
   }
 
