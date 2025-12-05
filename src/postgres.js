@@ -68,6 +68,8 @@ export class PostgresManager {
     this.createdDatabases = new Set();
     this.binaries = null;
     this.creatingDatabases = new Map(); // Track in-progress creations
+    this.socketDir = null; // Unix socket directory for faster local connections
+    this.adminPool = null; // Connection pool for database admin operations
   }
 
   /**
@@ -97,6 +99,14 @@ export class PostgresManager {
       }
     }
 
+    // Create Unix socket directory (Linux/macOS only, Windows uses TCP)
+    if (os.platform() !== 'win32') {
+      this.socketDir = path.join(os.tmpdir(), `pgserve-sock-${process.pid}-${Date.now()}`);
+      if (!fs.existsSync(this.socketDir)) {
+        fs.mkdirSync(this.socketDir, { recursive: true, mode: 0o700 });
+      }
+    }
+
     this.logger.info({
       databaseDir: this.databaseDir,
       persistent: this.persistent,
@@ -114,9 +124,13 @@ export class PostgresManager {
     // Start PostgreSQL server
     await this._startPostgres();
 
+    // Initialize admin connection pool (for database creation operations)
+    await this._initAdminPool();
+
     this.logger.info({
       databaseDir: this.databaseDir,
       port: this.port,
+      socketDir: this.socketDir,
       persistent: this.persistent
     }, 'PostgreSQL started successfully');
 
@@ -179,15 +193,64 @@ export class PostgresManager {
   }
 
   /**
+   * Initialize admin connection pool for database operations
+   * Uses Unix socket when available for faster connections
+   */
+  async _initAdminPool() {
+    const { default: pg } = await import('pg');
+
+    // Pool config - use Unix socket when available
+    const poolConfig = {
+      user: this.user,
+      password: this.password,
+      database: 'postgres',
+      max: 5, // Small pool - only for CREATE DATABASE operations
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    };
+
+    // Use Unix socket for faster local connections (Linux/macOS)
+    // Note: pg library needs both host (socket dir) AND port to find the socket file
+    if (this.socketDir) {
+      poolConfig.host = this.socketDir;
+      poolConfig.port = this.port; // Required for Unix socket path construction
+    } else {
+      poolConfig.host = '127.0.0.1';
+      poolConfig.port = this.port;
+    }
+
+    this.adminPool = new pg.Pool(poolConfig);
+
+    // Verify pool is working
+    const client = await this.adminPool.connect();
+    client.release();
+
+    this.logger.debug({
+      host: poolConfig.host,
+      maxConnections: poolConfig.max
+    }, 'Admin connection pool initialized');
+  }
+
+  /**
    * Start the PostgreSQL server process
    */
   async _startPostgres() {
     return new Promise((resolve, reject) => {
-      this.process = spawn(this.binaries.postgres, [
+      // Build PostgreSQL arguments
+      const pgArgs = [
         '-D', this.databaseDir,
         '-p', this.port.toString(),
-        '-k', '', // Disable unix socket (we use TCP only)
-      ], {
+      ];
+
+      // Enable Unix socket for faster local connections (Linux/macOS)
+      // Windows falls back to TCP only
+      if (this.socketDir) {
+        pgArgs.push('-k', this.socketDir);
+      } else {
+        pgArgs.push('-k', ''); // Disable Unix socket on Windows
+      }
+
+      this.process = spawn(this.binaries.postgres, pgArgs, {
         env: { ...process.env, LC_ALL: 'C', LANG: 'C' }
       });
 
@@ -261,41 +324,31 @@ export class PostgresManager {
     });
     this.creatingDatabases.set(dbName, creationPromise);
 
+    // Use pooled connection for faster database creation
+    let createError = null;
+    const client = await this.adminPool.connect();
     try {
-      // Use pg client to create database
-      const { default: pg } = await import('pg');
-      const client = new pg.Client({
-        host: '127.0.0.1',
-        port: this.port,
-        user: this.user,
-        password: this.password,
-        database: 'postgres'
-      });
-
-      await client.connect();
-
-      try {
-        await client.query(`CREATE DATABASE ${client.escapeIdentifier(dbName)}`);
-        this.createdDatabases.add(dbName);
-        this.logger.info({ dbName }, 'Database created');
-      } catch (error) {
-        // Database might already exist (from previous persistent session or race condition)
-        // 42P04 = duplicate_database, 23505 = unique_violation
-        if (error.code === '42P04' || error.code === '23505') {
-          this.createdDatabases.add(dbName);
-          this.logger.debug({ dbName }, 'Database already exists');
-        } else {
-          throw error;
-        }
-      } finally {
-        await client.end();
-      }
+      await client.query(`CREATE DATABASE ${client.escapeIdentifier(dbName)}`);
+      this.createdDatabases.add(dbName);
+      this.logger.info({ dbName }, 'Database created');
     } catch (error) {
-      throw new Error(`Failed to create database '${dbName}': ${error.message}`);
+      // Database might already exist (from previous persistent session or race condition)
+      // 42P04 = duplicate_database, 23505 = unique_violation
+      if (error.code === '42P04' || error.code === '23505') {
+        this.createdDatabases.add(dbName);
+        this.logger.debug({ dbName }, 'Database already exists');
+      } else {
+        createError = error;
+      }
     } finally {
+      client.release();
       // Signal completion to waiting requests
       this.creatingDatabases.delete(dbName);
       resolveCreation();
+    }
+
+    if (createError) {
+      throw new Error(`Failed to create database '${dbName}': ${createError.message}`);
     }
   }
 
@@ -311,6 +364,12 @@ export class PostgresManager {
    * Stop the PostgreSQL instance
    */
   async stop() {
+    // Close admin pool first
+    if (this.adminPool) {
+      await this.adminPool.end();
+      this.adminPool = null;
+    }
+
     if (this.process) {
       this.logger.info('Stopping PostgreSQL');
 
@@ -325,6 +384,16 @@ export class PostgresManager {
               this.logger.debug({ databaseDir: this.databaseDir }, 'Cleaned up temp directory');
             } catch (error) {
               this.logger.warn({ error: error.message }, 'Failed to clean up temp directory');
+            }
+          }
+
+          // Clean up socket directory
+          if (this.socketDir) {
+            try {
+              fs.rmSync(this.socketDir, { recursive: true, force: true });
+              this.logger.debug({ socketDir: this.socketDir }, 'Cleaned up socket directory');
+            } catch (error) {
+              this.logger.warn({ error: error.message }, 'Failed to clean up socket directory');
             }
           }
 
@@ -345,6 +414,15 @@ export class PostgresManager {
   }
 
   /**
+   * Get the Unix socket path for PostgreSQL connections
+   * Returns null on Windows (use TCP instead)
+   */
+  getSocketPath() {
+    if (!this.socketDir) return null;
+    return path.join(this.socketDir, `.s.PGSQL.${this.port}`);
+  }
+
+  /**
    * Get connection URL for a specific database
    * @param {string} dbName - Database name
    */
@@ -359,6 +437,8 @@ export class PostgresManager {
     return {
       port: this.port,
       databaseDir: this.databaseDir,
+      socketDir: this.socketDir,
+      socketPath: this.getSocketPath(),
       persistent: this.persistent,
       databases: Array.from(this.createdDatabases)
     };

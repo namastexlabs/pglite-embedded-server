@@ -10,6 +10,7 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { startMultiTenantServer } from '../src/index.js';
+import { startClusterServer } from '../src/cluster.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,8 @@ OPTIONS:
   --data <path>      Data directory for persistence (default: in-memory)
   --host <host>      Host to bind to (default: 127.0.0.1)
   --log <level>      Log level: error, warn, info, debug (default: info)
+  --cluster          Enable cluster mode (multi-core scaling)
+  --workers <n>      Number of worker processes (default: CPU cores)
   --no-provision     Disable auto-provisioning of databases
   --help             Show this help message
 
@@ -86,7 +89,9 @@ function parseArgs() {
     host: '127.0.0.1',
     dataDir: null, // null = memory mode
     logLevel: 'info',
-    autoProvision: true
+    autoProvision: true,
+    cluster: false,
+    workers: null // null = use CPU count
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -111,6 +116,14 @@ function parseArgs() {
       case '--log':
       case '-l':
         options.logLevel = args[++i];
+        break;
+
+      case '--cluster':
+        options.cluster = true;
+        break;
+
+      case '--workers':
+        options.workers = parseInt(args[++i], 10);
         break;
 
       case '--no-provision':
@@ -147,15 +160,51 @@ pgserve - Embedded PostgreSQL Server
 `);
 
   try {
-    const router = await startMultiTenantServer({
-      port: options.port,
-      host: options.host,
-      baseDir: options.dataDir,
-      logLevel: options.logLevel,
-      autoProvision: options.autoProvision
-    });
+    let server;
 
-    console.log(`
+    if (options.cluster) {
+      // Cluster mode - multi-core scaling
+      server = await startClusterServer({
+        port: options.port,
+        host: options.host,
+        baseDir: options.dataDir,
+        logLevel: options.logLevel,
+        autoProvision: options.autoProvision,
+        workers: options.workers
+      });
+
+      // Only primary process shows full startup message
+      if (server.workers) {
+        const stats = server.getStats();
+        console.log(`
+Cluster started successfully!
+
+  Endpoint:    postgresql://${options.host}:${options.port}/<database>
+  Mode:        ${memoryMode ? 'In-memory (ephemeral)' : 'Persistent'} (Cluster)
+  Workers:     ${stats.workers} processes
+  Data:        ${memoryMode ? '(temp directory)' : options.dataDir}
+  Auto-create: ${options.autoProvision ? 'Enabled' : 'Disabled'}
+
+Examples:
+  postgresql://${options.host}:${options.port}/myapp
+  postgresql://${options.host}:${options.port}/testdb
+
+Press Ctrl+C to stop
+`);
+      }
+    } else {
+      // Single process mode
+      const router = await startMultiTenantServer({
+        port: options.port,
+        host: options.host,
+        baseDir: options.dataDir,
+        logLevel: options.logLevel,
+        autoProvision: options.autoProvision
+      });
+
+      server = router;
+
+      console.log(`
 Server started successfully!
 
   Endpoint:    postgresql://${options.host}:${options.port}/<database>
@@ -170,11 +219,12 @@ Examples:
 
 Press Ctrl+C to stop
 `);
+    }
 
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\nShutting down...');
-      await router.stop();
+      await server.stop();
       console.log('Server stopped.');
       process.exit(0);
     };

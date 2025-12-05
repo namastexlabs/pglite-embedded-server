@@ -101,10 +101,12 @@ export class MultiTenantRouter extends EventEmitter {
 
       // Start listening
       this.server.listen(this.port, this.host, () => {
+        const socketPath = this.pgManager.getSocketPath();
         this.logger.info({
           host: this.host,
           port: this.port,
           pgPort: this.pgPort,
+          pgSocketPath: socketPath || '(TCP)',
           baseDir: this.memoryMode ? '(in-memory)' : this.baseDir,
           memoryMode: this.memoryMode,
           autoProvision: this.autoProvision,
@@ -119,45 +121,37 @@ export class MultiTenantRouter extends EventEmitter {
 
   /**
    * Handle incoming connection (TCP Proxy)
+   * OPTIMIZED: Removed hot path logging for performance
    */
   async handleConnection(socket) {
-    const connId = `${socket.remoteAddress}:${socket.remotePort}`;
-    const startTime = Date.now();
+    // Track connection
+    this.connections.add(socket);
 
     // Optimize socket BEFORE any I/O
     this.optimizeSocket(socket);
-
-    // Track connection
-    this.connections.add(socket);
 
     let dbName = null;
     let pgSocket = null;
 
     try {
       // Extract database name from PostgreSQL handshake
-      this.logger.debug({ connId }, 'Reading startup message');
       const { dbName: extractedDbName, buffered } = await extractDatabaseNameFromSocket(socket);
       dbName = extractedDbName;
-
-      this.logger.info({ dbName, connId }, 'Connection request');
 
       // Auto-provision database if needed
       if (this.autoProvision) {
         await this.pgManager.createDatabase(dbName);
       }
 
-      const routingTime = Date.now() - startTime;
-      this.logger.info({
-        dbName,
-        connId,
-        routingTimeMs: routingTime
-      }, 'Routing to PostgreSQL');
-
-      // Connect to real PostgreSQL
-      pgSocket = net.connect({
-        host: '127.0.0.1',
-        port: this.pgPort
-      });
+      // Connect to real PostgreSQL (prefer Unix socket for speed)
+      const socketPath = this.pgManager.getSocketPath();
+      if (socketPath) {
+        // Unix socket connection (Linux/macOS) - ~30% faster than TCP
+        pgSocket = net.connect({ path: socketPath });
+      } else {
+        // TCP fallback (Windows)
+        pgSocket = net.connect({ host: '127.0.0.1', port: this.pgPort });
+      }
 
       // Wait for PostgreSQL connection
       await new Promise((resolve, reject) => {
@@ -177,51 +171,30 @@ export class MultiTenantRouter extends EventEmitter {
       socket.pipe(pgSocket);
       pgSocket.pipe(socket);
 
-      this.logger.debug({ dbName, connId }, 'Connection established');
-
-      // Handle cleanup
+      // Handle cleanup - optimized: single handler, no logging in hot path
       const cleanup = () => {
-        this.logger.debug({ dbName, connId }, 'Connection closed');
         this.connections.delete(socket);
-
-        if (pgSocket && !pgSocket.destroyed) {
-          pgSocket.destroy();
-        }
-        if (socket && !socket.destroyed) {
-          socket.destroy();
-        }
+        if (pgSocket && !pgSocket.destroyed) pgSocket.destroy();
+        if (socket && !socket.destroyed) socket.destroy();
       };
 
       socket.once('close', cleanup);
-      socket.once('error', (error) => {
-        this.logger.warn({ dbName, connId, err: error }, 'Client socket error');
-        cleanup();
-      });
-
+      socket.once('error', cleanup);
       pgSocket.once('close', () => {
-        this.logger.debug({ dbName, connId }, 'PostgreSQL connection closed');
-        if (socket && !socket.destroyed) {
-          socket.destroy();
-        }
+        if (socket && !socket.destroyed) socket.destroy();
       });
+      pgSocket.once('error', cleanup);
 
-      pgSocket.once('error', (error) => {
-        this.logger.warn({ dbName, connId, err: error }, 'PostgreSQL socket error');
-        cleanup();
-      });
-
-      this.emit('connection', { dbName, socket, connId });
+      this.emit('connection', { dbName, socket });
     } catch (error) {
-      this.logger.error({ dbName, connId, err: error }, 'Connection error');
+      // Only log actual errors
+      this.logger.error({ dbName, err: error }, 'Connection error');
 
       // Cleanup
-      if (pgSocket && !pgSocket.destroyed) {
-        pgSocket.destroy();
-      }
-
+      if (pgSocket && !pgSocket.destroyed) pgSocket.destroy();
       socket.destroy();
       this.connections.delete(socket);
-      this.emit('connection-error', { error, dbName, connId });
+      this.emit('connection-error', { error, dbName });
     }
   }
 

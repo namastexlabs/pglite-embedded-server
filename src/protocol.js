@@ -134,36 +134,59 @@ export function extractDatabaseName(data) {
   }
 }
 
+// Pre-allocated buffer pool for startup message parsing (avoids allocation per connection)
+const STARTUP_BUFFER_SIZE = 8192; // Max startup message is typically < 1KB
+const bufferPool = [];
+const MAX_POOL_SIZE = 100;
+
+function acquireBuffer() {
+  return bufferPool.pop() || Buffer.allocUnsafe(STARTUP_BUFFER_SIZE);
+}
+
+function releaseBuffer(buf) {
+  if (bufferPool.length < MAX_POOL_SIZE) {
+    bufferPool.push(buf);
+  }
+}
+
 /**
  * Read startup message from socket and buffer it
+ * OPTIMIZED: Uses pre-allocated buffer pool to avoid allocation per connection
  *
  * @param {net.Socket} socket - TCP socket
  * @returns {Promise<{message: Buffer, allData: Buffer}>} Startup message and all buffered data
  */
 export async function readStartupMessage(socket) {
   return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
+    const buffer = acquireBuffer();
+    let offset = 0;
     let expectedLength = null;
     let resolved = false;
 
     const onData = (chunk) => {
       if (resolved) return;
 
-      buffer = Buffer.concat([buffer, chunk]);
+      // Copy chunk into pre-allocated buffer (avoids Buffer.concat allocation)
+      const copyLen = Math.min(chunk.length, STARTUP_BUFFER_SIZE - offset);
+      chunk.copy(buffer, offset, 0, copyLen);
+      offset += copyLen;
 
       // Read expected length from first 4 bytes
-      if (expectedLength === null && buffer.length >= 4) {
+      if (expectedLength === null && offset >= 4) {
         expectedLength = buffer.readInt32BE(0);
       }
 
       // Check if we have full message
-      if (expectedLength !== null && buffer.length >= expectedLength) {
+      if (expectedLength !== null && offset >= expectedLength) {
         resolved = true;
         socket.removeListener('data', onData);
         socket.removeListener('error', onError);
 
-        const message = buffer.slice(0, expectedLength);
-        resolve({ message, allData: buffer });
+        // Create result buffers (need to copy since we're reusing pool buffer)
+        const message = Buffer.from(buffer.subarray(0, expectedLength));
+        const allData = Buffer.from(buffer.subarray(0, offset));
+        releaseBuffer(buffer);
+        resolve({ message, allData });
       }
     };
 
@@ -172,6 +195,7 @@ export async function readStartupMessage(socket) {
       resolved = true;
       socket.removeListener('data', onData);
       socket.removeListener('error', onError);
+      releaseBuffer(buffer);
       reject(error);
     };
 
@@ -187,6 +211,7 @@ export async function readStartupMessage(socket) {
       resolved = true;
       socket.removeListener('data', onData);
       socket.removeListener('error', onError);
+      releaseBuffer(buffer);
       reject(new Error('Timeout reading startup message'));
     }, 2000);
   });

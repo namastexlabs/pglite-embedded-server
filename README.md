@@ -1,323 +1,354 @@
-# pgserve
+<div align="center">
+  <h1>pgserve</h1>
+  <p><strong>Embedded PostgreSQL Server with TRUE Concurrent Connections</strong></p>
 
-**Multi-tenant PostgreSQL router using PGlite** - Single port, auto-provisioning, zero config.
+  <p>
+    <a href="https://www.npmjs.com/package/pgserve"><img src="https://img.shields.io/npm/v/pgserve?style=flat-square&color=00D9FF" alt="npm version"></a>
+    <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square" alt="Node.js">
+    <img src="https://img.shields.io/badge/PostgreSQL-17.7-blue?style=flat-square" alt="PostgreSQL">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
+    <a href="https://discord.gg/xcW8c7fF3R"><img src="https://img.shields.io/discord/1095114867012292758?style=flat-square&color=00D9FF&label=discord" alt="Discord"></a>
+  </p>
 
-Perfect for multi-user apps, AI agents, and embedded databases.
+  <p><em>Zero config, auto-provision databases, unlimited concurrent connections. Just works.</em></p>
 
-## ✨ Features
+  <p>
+    <a href="#features">Features</a> •
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#performance">Performance</a> •
+    <a href="#programmatic-api">API</a> •
+    <a href="#contributing">Contributing</a>
+  </p>
+</div>
 
-- 🎯 **Multi-Tenant** - Single port, multiple isolated databases (one per user/app)
-- 🚀 **Auto-Provisioning** - Databases created on demand from connection string
-- 🔌 **Single Endpoint** - `postgresql://localhost:8432/dbname` routes to correct PGlite instance
-- ⚡ **High Performance** - MVCC, row-level locking, concurrent writes
-- 🎛️ **Zero Configuration** - Auto-tuned for your hardware (CPU, RAM)
-- 📦 **PostgreSQL Compatible** - Works with any PostgreSQL client (psql, Prisma, pg, etc.)
-- 🛡️ **Data Isolation** - Each database = separate PGlite instance
-- 💾 **Persistent** - Data survives restarts
+---
 
-## 🎯 Use Cases
-
-### Perfect For
-
-- 🤖 **AI Agents** - Each agent gets isolated database (sessions, memory, state)
-- 👥 **Multi-User Apps** - One database per user, single endpoint
-- 🏢 **SaaS Applications** - Tenant isolation without infrastructure complexity
-- 🧪 **Development** - Local PostgreSQL without Docker
-- 📱 **Desktop Apps** - Electron, Tauri with embedded multi-tenant DB
-
-### Real-World Examples
-
-- **AI Agent Swarms**: 100+ agents, each with isolated database
-- **Multi-Tenant SaaS**: Single endpoint, automatic tenant provisioning
-- **Desktop Apps**: Embedded PostgreSQL with multi-user support
-
-## 🚀 Quick Start
-
-### Installation
+## Quick Start
 
 ```bash
-npm install pgserve
-# or
-pnpm add pgserve
+# Zero install - just run!
+npx pgserve
+
+# Connect from any PostgreSQL client
+psql postgresql://localhost:5432/myapp
 ```
 
-### Multi-Tenant Mode (Recommended)
+That's it. Database `myapp` is auto-created on first connection.
+
+**Or install globally:**
+```bash
+npm install -g pgserve
+pgserve
+```
+
+---
+
+## What is pgserve?
+
+pgserve is an embedded PostgreSQL 17 server that runs anywhere Node.js runs:
+
+- **Native PostgreSQL binaries** - Auto-downloaded on install (no Docker, no system install)
+- **TRUE concurrent connections** - Native process forking, not WASM mutex locks
+- **Auto-provision databases** - Connect to any database name, it's created automatically
+- **Memory mode by default** - Fast, ephemeral, perfect for development
+
+**Key differentiator**: Unlike WASM-based solutions (PGlite), pgserve runs real PostgreSQL with native process forking - unlimited parallel queries, no connection-level locking.
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **TRUE Concurrency** | Native PostgreSQL process forking - unlimited parallel queries |
+| **Zero Config** | Just run `pgserve`, connect to any database name |
+| **Auto-Provision** | Database created on first connection |
+| **Memory Mode** | Default mode - fast, ephemeral (data lost on restart) |
+| **Persistent Mode** | Use `--data ./path` to persist databases to disk |
+| **Cross-Platform** | Linux x64, macOS ARM64/x64, Windows x64 |
+| **PostgreSQL 17.7** | Latest stable, native binaries |
+| **Any Client Works** | psql, node-postgres, Prisma, Drizzle, etc. |
+
+---
+
+## Installation
+
+**Zero install (recommended):**
+```bash
+npx pgserve
+```
+
+**Or install globally:**
+```bash
+npm install -g pgserve
+pgserve
+```
+
+**Or as a project dependency:**
+```bash
+npm install pgserve
+```
+
+Platform-specific PostgreSQL binaries are automatically downloaded on first run.
+
+---
+
+## Usage
+
+### CLI Options
+
+```
+pgserve [options]
+
+Options:
+  --port <number>    PostgreSQL port (default: 5432)
+  --data <path>      Data directory for persistence (default: in-memory)
+  --host <host>      Host to bind to (default: 127.0.0.1)
+  --log <level>      Log level: error, warn, info, debug (default: info)
+  --cluster          Enable cluster mode (multi-core scaling)
+  --workers <n>      Number of worker processes (default: CPU cores)
+  --no-provision     Disable auto-provisioning of databases
+  --help             Show help message
+```
+
+### Examples
+
+```bash
+# Development (memory mode - fast, disposable)
+pgserve
+
+# Production (persistent data)
+pgserve --data /var/lib/pgserve
+
+# Custom port
+pgserve --port 5433
+
+# Cluster mode (multi-core scaling)
+pgserve --cluster --workers 4
+
+# Debug logging
+pgserve --log debug
+
+# Persistent with custom port
+pgserve --port 5433 --data ./mydata
+```
+
+### Connecting
+
+Any database name auto-creates:
+
+```bash
+# These all work - databases auto-created on first connection
+postgresql://localhost:5432/myapp
+postgresql://localhost:5432/tenant_123
+postgresql://localhost:5432/test_db
+```
+
+---
+
+## Programmatic API
 
 ```javascript
 import { startMultiTenantServer } from 'pgserve';
 
-// Start multi-tenant router on single port
-const router = await startMultiTenantServer({
-  port: 8432,           // Single port for all databases
-  baseDir: './data',    // Base directory (creates ./data/dbname/ per DB)
-  autoProvision: true,  // Auto-create databases (default: true)
-  maxInstances: 100,    // Max concurrent databases
-  logLevel: 'info'
+// Start server
+const server = await startMultiTenantServer({
+  port: 5432,
+  host: '127.0.0.1',
+  baseDir: null,      // null = memory mode, or path for persistence
+  logLevel: 'info',
+  autoProvision: true
 });
 
-// Clients connect like normal PostgreSQL:
-// postgresql://localhost:8432/user123  → ./data/user123/
-// postgresql://localhost:8432/app456   → ./data/app456/
+// Connect using any PostgreSQL client
+// postgresql://localhost:5432/any_database_name
+
+// Get server stats
+const stats = server.getStats();
+console.log(stats);
+
+// Graceful shutdown
+await server.stop();
 ```
 
-### Usage with PostgreSQL Clients
+### With node-postgres
 
 ```javascript
 import pg from 'pg';
 
-// Connect to database "user123" (auto-created)
-const client1 = new pg.Client({
-  connectionString: 'postgresql://localhost:8432/user123'
+// Connect to auto-created database
+const client = new pg.Client({
+  connectionString: 'postgresql://localhost:5432/myapp'
 });
 
-await client1.connect();
-await client1.query('CREATE TABLE users (id SERIAL, name TEXT)');
-await client1.query("INSERT INTO users (name) VALUES ('Alice')");
-
-// Connect to database "app456" (different isolated instance)
-const client2 = new pg.Client({
-  connectionString: 'postgresql://localhost:8432/app456'
-});
-
-await client2.connect();
-await client2.query('CREATE TABLE posts (id SERIAL, title TEXT)');
-
-// Each database is completely isolated!
+await client.connect();
+await client.query('CREATE TABLE users (id SERIAL, name TEXT)');
+await client.query("INSERT INTO users (name) VALUES ('Alice')");
+const result = await client.query('SELECT * FROM users');
+console.log(result.rows);
+await client.end();
 ```
 
 ### With Prisma
 
-```javascript
+```prisma
 // prisma/schema.prisma
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// .env
-DATABASE_URL="postgresql://localhost:8432/myapp"
 ```
 
 ```bash
-# Auto-provisions "myapp" database
+# .env
+DATABASE_URL="postgresql://localhost:5432/myapp"
+
+# Run migrations (auto-provisions "myapp" database)
 npx prisma migrate dev
 ```
 
-## 📖 API Reference
+---
 
-### `startMultiTenantServer(options)`
-
-Start multi-tenant router server.
-
-```javascript
-const router = await startMultiTenantServer({
-  port: 8432,             // Port to listen on (default: 8432)
-  host: '127.0.0.1',      // Host to bind (default: 127.0.0.1)
-  baseDir: './data',      // Base data directory (default: './data')
-  autoProvision: true,    // Auto-create databases (default: true)
-  maxInstances: 100,      // Max concurrent databases (default: 100)
-  logLevel: 'info',       // Log level: error, warn, info, debug (default: 'info')
-  inspect: false          // Enable wire protocol debugging (default: false)
-});
-
-// Returns MultiTenantRouter instance
-```
-
-### Router Methods
-
-```javascript
-// Get router stats
-const stats = router.getStats();
-// {
-//   port: 8432,
-//   activeConnections: 2,
-//   pool: {
-//     totalInstances: 3,
-//     maxInstances: 100,
-//     instances: [...]
-//   }
-// }
-
-// List all databases
-const databases = router.listDatabases();
-// [
-//   { dbName: 'user123', locked: false, queueLength: 0, ... },
-//   { dbName: 'app456', locked: true, queueLength: 1, ... }
-// ]
-
-// Stop router (closes all instances)
-await router.stop();
-```
-
-## 🏗️ Architecture
-
-### Single Port, Multi-Tenant Routing
+## Architecture
 
 ```
-Client 1: postgresql://localhost:8432/user123
-Client 2: postgresql://localhost:8432/app456
-Client 3: postgresql://localhost:8432/tenant789
-         ↓
-┌────────────────────────────────────────┐
-│  Multi-Tenant Router (port 8432)       │
-│  - Parses connection database name     │
-│  - Routes to correct PGlite instance   │
-│  - Auto-provisions new databases       │
-└────────────────────────────────────────┘
-         ↓
-┌────────────────────────────────────────┐
-│  Instance Pool                         │
-│  ├─ user123   → PGlite('./data/user123')   │
-│  ├─ app456    → PGlite('./data/app456')    │
-│  └─ tenant789 → PGlite('./data/tenant789') │
-└────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                  Client Connections                      │
+│           (psql, pg, Prisma, Drizzle, etc.)             │
+└─────────────────────────┬───────────────────────────────┘
+                          │
+              ┌───────────┴───────────┐
+              │   MultiTenantRouter   │
+              │      (TCP Proxy)      │
+              │  - Extract DB name    │
+              │  - Auto-provision     │
+              │  - Route connections  │
+              └───────────┬───────────┘
+                          │
+              ┌───────────┴───────────┐
+              │   PostgresManager     │
+              │  (Binary Execution)   │
+              │  - Direct PG binaries │
+              │  - No locale deps     │
+              └───────────┬───────────┘
+                          │
+              ┌───────────┴───────────┐
+              │   PostgreSQL 17.7     │
+              │   (Native Process)    │
+              │   TRUE CONCURRENCY    │
+              │   Unlimited Parallel  │
+              └───────────────────────┘
 ```
 
 ### How It Works
 
-1. **Client connects**: `postgresql://localhost:8432/myapp`
-2. **Router parses** PostgreSQL startup message → extracts database name: `myapp`
-3. **Pool checks** for existing PGlite instance for `myapp`
-4. **Auto-provision** creates `./data/myapp/` if doesn't exist
-5. **Route connection** to PGlite instance
-6. **Client communicates** with isolated database
+1. **Client connects**: `postgresql://localhost:5432/myapp`
+2. **Router extracts** database name from PostgreSQL handshake
+3. **Auto-provision** creates database if it doesn't exist
+4. **TCP proxy** forwards connection to PostgreSQL
+5. **Native PostgreSQL** handles the connection with process forking
 
-### Connection Lifecycle
+---
 
-- **First connection to DB**: PGlite instance created, database initialized
-- **Subsequent connections**: Reuses existing PGlite instance
-- **Concurrent connections**: Queued (PGlite is single-connection per instance)
-- **Connection closes**: Instance unlocked, ready for next connection
+## Comparison
 
-## 📊 Performance
+| Feature | pgserve | PGlite | Docker Postgres |
+|---------|---------|--------|-----------------|
+| Concurrent Connections | **Unlimited** | 1 per DB | Unlimited |
+| Zero Config | Yes | Yes | No |
+| Auto-Download | Yes | Yes | No |
+| Memory Mode | Yes | Yes | No |
+| Native Performance | Yes | No (WASM) | Yes |
+| No Docker Required | Yes | Yes | No |
+| Database Size | Unlimited | ~1GB limit | Unlimited |
 
-### vs Multiple Port Approach
+---
 
-| Approach | Ports Used | Management | Scalability |
-|----------|-----------|------------|-------------|
-| **Multi-tenant** | 1 | Auto | ✅ Excellent (100+ DBs) |
-| Multi-port | 1 per DB | Manual | ⚠️ Limited (port exhaustion) |
+## Performance
 
-### Benchmarks
+**Real benchmark results (December 2025):**
 
-- **DB creation**: ~50ms per database (lazy initialization)
-- **Connection routing**: < 1ms overhead
-- **Concurrent databases**: Tested with 100+ isolated instances
-- **Memory**: ~10-30MB per PGlite instance (depends on data)
+| Scenario | SQLite | PGlite | PostgreSQL | pgserve | Winner |
+|----------|--------|--------|------------|---------|--------|
+| **Concurrent Writes** (10 agents) | 99 qps | 225 qps | 649 qps | 559 qps | PostgreSQL |
+| **Mixed Workload** (messages) | 354 qps | 536 qps | 1023 qps | **1098 qps** | **pgserve** |
+| **Write Lock** (50 writers) | 104 qps | 231 qps | 448 qps | **518 qps** | **pgserve** |
 
-## 🔧 CLI Usage
+*PostgreSQL = Docker with disk storage (realistic production comparison)*
 
-### Install Globally
+### pgserve vs PGlite (embedded comparison)
 
-```bash
-npm install -g pgserve
-```
+| Scenario | pgserve | PGlite | Advantage |
+|----------|---------|--------|-----------|
+| Concurrent Writes | 559 qps | 225 qps | **2.5x faster** |
+| Mixed Workload | 1098 qps | 536 qps | **2.0x faster** |
+| Write Lock | 518 qps | 231 qps | **2.2x faster** |
 
-### Commands
+### pgserve vs Docker PostgreSQL
 
-```bash
-# Start multi-tenant router
-pgserve start --port 8432 --dir ./data
+| Scenario | pgserve | PostgreSQL | Result |
+|----------|---------|------------|--------|
+| Concurrent Writes | 559 qps | 649 qps | 86% of Docker |
+| Mixed Workload | **1098 qps** | 1023 qps | **7% faster** |
+| Write Lock | **518 qps** | 448 qps | **16% faster** |
 
-# Check router status
-pgserve router-stats
+**Key takeaway:** pgserve beats Docker PostgreSQL in typical workloads (mixed ops, write contention) while being 2-3x faster than PGlite across the board. For development, CI/CD, and ephemeral deployments, pgserve offers PostgreSQL-level performance without Docker.
 
-# List all databases
-pgserve list-databases
+> Run benchmarks yourself: `npm run bench`
 
-# Stop router
-pgserve stop-router
-```
+---
 
-## 🛠️ Advanced Usage
+## Requirements
 
-### Custom Instance Pool
+- **Node.js** >= 18.0.0
+- **Platform**: Linux x64, macOS ARM64/x64, or Windows x64
 
-```javascript
-import { InstancePool } from 'pgserve';
+---
 
-const pool = new InstancePool({
-  baseDir: './databases',
-  maxInstances: 50,
-  autoProvision: true
-});
+## Use Cases
 
-// Get or create instance
-const instance = await pool.getOrCreate('mydb');
+- **Local Development** - PostgreSQL without Docker or system install
+- **Testing & CI/CD** - Fast, ephemeral databases per test run
+- **AI Agents** - Each agent gets isolated database
+- **Multi-Tenant Apps** - Auto-provision databases per tenant
+- **Prototyping** - Zero setup, just connect
 
-// Access PGlite directly
-const result = await instance.db.query('SELECT version()');
-```
+---
 
-### Connection Queueing
+## Contributing
 
-PGlite is **single-connection** per instance. When multiple clients connect to the same database:
-
-```javascript
-// Client 1 connects to "mydb" → locks instance
-const client1 = new pg.Client({ database: 'mydb', ... });
-await client1.connect(); // ✅ Connected
-
-// Client 2 tries to connect to "mydb" → queued
-const client2 = new pg.Client({ database: 'mydb', ... });
-await client2.connect(); // ⏳ Waits for client1 to disconnect
-
-// Client 1 disconnects
-await client1.end();
-
-// Client 2 auto-connects
-// ✅ Connected
-```
-
-Default timeout: **30 seconds**. Customize in `pool.acquire()`:
-
-```javascript
-await pool.acquire('mydb', socket, timeout = 60000); // 60s timeout
-```
-
-## 🔐 Security Notes
-
-- **No authentication**: PGlite doesn't support auth (embedded use case)
-- **Bind to localhost**: Default `127.0.0.1` (local only)
-- **Production**: Use proper PostgreSQL for external access
-
-## 📁 File Structure
-
-```
-./data/
-  ├─ user123/        (PGlite data for "user123" database)
-  │  ├─ base/
-  │  ├─ pg_wal/
-  │  └─ PG_VERSION
-  ├─ app456/         (PGlite data for "app456" database)
-  └─ tenant789/      (PGlite data for "tenant789" database)
-```
-
-## 🤝 Contributing
-
-Contributions welcome! Please:
+Contributions welcome!
 
 1. Fork the repository
 2. Create a feature branch
 3. Add tests for new features
 4. Submit a pull request
 
-## 📄 License
+---
+
+## License
 
 MIT License - Copyright (c) 2025 Namastex Labs
 
-## 🙏 Credits
+---
 
-Built on top of:
-- [@electric-sql/pglite](https://pglite.dev) - PostgreSQL WASM
-- [@electric-sql/pglite-socket](https://www.npmjs.com/package/@electric-sql/pglite-socket) - Wire protocol server
+## Links
 
-## 📧 Support
-
-- **Issues**: [GitHub Issues](https://github.com/namastexlabs/pgserve/issues)
-- **Email**: labs@namastex.com
-- **Website**: [namastex.com](https://namastex.com)
+- **GitHub**: [github.com/namastexlabs/pgserve](https://github.com/namastexlabs/pgserve)
+- **Issues**: [github.com/namastexlabs/pgserve/issues](https://github.com/namastexlabs/pgserve/issues)
+- **npm**: [npmjs.com/package/pgserve](https://www.npmjs.com/package/pgserve)
 
 ---
 
-**Made with ❤️ by [Namastex Labs](https://namastex.com)**
+## Credits
+
+Built with:
+- [embedded-postgres](https://github.com/leinelissen/embedded-postgres) - PostgreSQL binaries for Node.js
+- [@embedded-postgres/*](https://www.npmjs.com/search?q=%40embedded-postgres) - Platform-specific native binaries
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://namastex.ai">Namastex Labs</a><br>
+  <em>AI that elevates human potential, not replaces it</em>
+</p>

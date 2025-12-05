@@ -40,7 +40,10 @@
     "@embedded-postgres/darwin-x64": "17.7.0-beta.15",
     "@embedded-postgres/win32-x64": "17.7.0-beta.15"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "better-sqlite3": "^11.7.0",
+    "@electric-sql/pglite": "^0.2.17"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
