@@ -4,11 +4,14 @@
  * Manages multiple PGlite instances (one per database)
  * Handles lazy initialization, connection locking, and cleanup
  *
+ * IMPORTANT: PGlite + pglite-socket only supports ONE active connection
+ * per database at a time. Concurrent connections will queue and wait.
+ *
  * Performance Optimizations:
  * - Fast Map-based lookups (O(1) access)
  * - Minimal memory overhead per instance
  * - Pino structured logging
- * - Proper event listener cleanup
+ * - Short wait timeouts for fast failure
  */
 
 import { PGlite } from '@electric-sql/pglite';
@@ -25,17 +28,15 @@ class ManagedInstance extends EventEmitter {
     this.dbName = dbName;
     this.dataDir = dataDir;
     this.memoryMode = memoryMode;
-    this.logger = logger; // Pino logger
+    this.logger = logger;
     this.db = null;
     this.locked = false;
     this.activeSocket = null;
-    this.lockTimer = null; // Safety timeout for locks
     this.queue = [];
     this.createdAt = Date.now();
     this.lastAccess = Date.now();
 
-    // Performance: Limit max listeners
-    this.setMaxListeners(10);
+    this.setMaxListeners(100);
   }
 
   /**
@@ -49,11 +50,9 @@ class ManagedInstance extends EventEmitter {
     const initStart = Date.now();
 
     if (this.memoryMode) {
-      // Use in-memory database (unique per instance)
       this.logger.debug({ dbName: this.dbName, mode: 'memory' }, 'Initializing in-memory PGlite instance');
       this.db = new PGlite();
     } else {
-      // Ensure directory exists for file-based storage
       if (!fs.existsSync(this.dataDir)) {
         fs.mkdirSync(this.dataDir, { recursive: true });
       }
@@ -77,11 +76,9 @@ class ManagedInstance extends EventEmitter {
   }
 
   /**
-   * Lock instance to a socket
-   * @param {net.Socket} socket - TCP socket to lock to
-   * @param {number} timeout - Safety timeout in ms (default 5 minutes)
+   * Lock instance to a socket (one connection at a time)
    */
-  lock(socket, timeout = 300000) {
+  lock(socket) {
     if (this.locked) {
       throw new Error(`Instance ${this.dbName} is already locked`);
     }
@@ -90,66 +87,53 @@ class ManagedInstance extends EventEmitter {
     this.activeSocket = socket;
     this.lastAccess = Date.now();
 
-    // Safety net: auto-unlock after timeout (prevents permanent locks)
-    this.lockTimer = setTimeout(() => {
-      this.logger.warn({ dbName: this.dbName }, 'Lock timeout - forcing unlock');
-      this.unlock();
-    }, timeout);
+    // Auto-unlock when socket closes
+    const unlock = () => this.unlock();
+    socket.once('close', unlock);
+    socket.once('error', unlock);
 
-    // Only attach event listeners if socket is provided
-    if (socket) {
-      socket.on('close', () => this.unlock());
-      socket.on('error', () => this.unlock());
-    }
-
-    this.emit('locked', this.dbName, socket);
+    this.emit('locked', this.dbName);
   }
 
   /**
    * Unlock instance (connection closed)
    */
   unlock() {
-    // Clear safety timeout if it exists
-    if (this.lockTimer) {
-      clearTimeout(this.lockTimer);
-      this.lockTimer = null;
-    }
-
     this.locked = false;
     this.activeSocket = null;
     this.lastAccess = Date.now();
 
     this.emit('unlocked', this.dbName);
 
-    // Resolve one waiting promise (it will lock, then when it unlocks, the next will be resolved)
+    // Process next waiting connection
     if (this.queue.length > 0) {
-      const { resolve } = this.queue.shift();
-      // Don't lock here - let the acquire() caller handle locking with their socket
-      resolve(this);
+      const next = this.queue.shift();
+      next.resolve(this);
     }
   }
 
   /**
-   * Wait for instance to be free
+   * Wait for instance to be free (with short timeout)
    */
-  async waitForFree(timeout = 30000) {
+  async waitForFree(timeout = 5000) {
     if (!this.locked) {
       return this;
     }
 
     return new Promise((resolve, reject) => {
-      this.queue.push({ socket: null, resolve, reject });
-
       const timer = setTimeout(() => {
-        const index = this.queue.findIndex((item) => item.resolve === resolve);
-        if (index !== -1) {
-          this.queue.splice(index, 1);
-        }
-        reject(new Error(`Timeout waiting for database ${this.dbName}`));
+        const idx = this.queue.findIndex((item) => item.resolve === resolve);
+        if (idx !== -1) this.queue.splice(idx, 1);
+        reject(new Error(`Database ${this.dbName} busy - try again`));
       }, timeout);
 
-      // Clear timeout on resolve
-      this.once('unlocked', () => clearTimeout(timer));
+      this.queue.push({
+        resolve: (instance) => {
+          clearTimeout(timer);
+          resolve(instance);
+        },
+        reject
+      });
     });
   }
 
@@ -161,7 +145,6 @@ class ManagedInstance extends EventEmitter {
       try {
         await this.db.close();
       } catch (error) {
-        // Ignore ExitStatus errors (normal WASM cleanup)
         if (error.name !== 'ExitStatus') {
           console.error(`Error closing instance ${this.dbName}:`, error.message);
         }
@@ -195,23 +178,20 @@ export class InstancePool extends EventEmitter {
     this.baseDir = options.baseDir || './data';
     this.memoryMode = options.memoryMode || false;
     this.maxInstances = options.maxInstances || 100;
-    this.autoProvision = options.autoProvision !== false; // Default true
-    this.instances = new Map(); // dbName -> ManagedInstance (O(1) lookups)
-    this.logger = options.logger; // Pino logger
+    this.autoProvision = options.autoProvision !== false;
+    this.instances = new Map();
+    this.logger = options.logger;
 
-    // Performance: Set max listeners based on max instances
     this.setMaxListeners(this.maxInstances + 10);
   }
 
   /**
-   * Get or create PGlite instance for database (Performance Optimized)
+   * Get or create PGlite instance for database
    */
   async getOrCreate(dbName) {
-    // Fast path: Check cache first (O(1) lookup)
     let instance = this.instances.get(dbName);
 
     if (!instance) {
-      // Check max instances limit
       if (this.instances.size >= this.maxInstances) {
         this.logger.error({
           dbName,
@@ -230,46 +210,41 @@ export class InstancePool extends EventEmitter {
         throw new Error(`Database ${dbName} does not exist (auto-provision disabled)`);
       }
 
-      // Create new instance
       const dataDir = this.memoryMode ? null : path.join(this.baseDir, dbName);
       instance = new ManagedInstance(
         dbName,
         dataDir,
-        this.logger.child({ dbName }), // Child logger with context
+        this.logger.child({ dbName }),
         this.memoryMode
       );
 
-      // Forward events (use once() where appropriate for performance)
       instance.on('initialized', (name) => this.emit('instance-created', name));
       instance.on('locked', (name) => this.emit('instance-locked', name));
       instance.on('unlocked', (name) => this.emit('instance-unlocked', name));
       instance.on('closed', (name) => this.emit('instance-closed', name));
 
-      // Add to cache BEFORE initialization (prevents race conditions)
       this.instances.set(dbName, instance);
     }
 
-    // Lazy initialize (async, may already be initialized)
     await instance.initialize();
-
     return instance;
   }
 
   /**
    * Acquire instance (lock to socket)
+   * Uses short timeout (5 seconds) - clients should retry on busy
    */
-  async acquire(dbName, socket, timeout = 30000) {
+  async acquire(dbName, socket, timeout = 5000) {
     const instance = await this.getOrCreate(dbName);
 
-    // If locked, wait for it to be free
+    // If locked, wait with short timeout
     if (instance.locked) {
-      console.log(`⏳ Database ${dbName} is busy, queuing connection...`);
+      this.logger.debug({ dbName, queueLength: instance.queue.length }, 'Database busy, queueing');
       await instance.waitForFree(timeout);
     }
 
     // Lock to this socket
     instance.lock(socket);
-
     return instance;
   }
 

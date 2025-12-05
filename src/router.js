@@ -64,12 +64,12 @@ export class MultiTenantRouter extends EventEmitter {
       this.emit('database-created', dbName);
     });
 
-    this.pool.on('instance-locked', (dbName) => {
-      this.logger.debug({ dbName }, 'Database locked');
+    this.pool.on('instance-connection', (dbName) => {
+      this.logger.debug({ dbName }, 'Connection opened');
     });
 
-    this.pool.on('instance-unlocked', (dbName) => {
-      this.logger.debug({ dbName }, 'Database unlocked');
+    this.pool.on('instance-disconnection', (dbName) => {
+      this.logger.debug({ dbName }, 'Connection closed');
     });
   }
 
@@ -199,8 +199,6 @@ export class MultiTenantRouter extends EventEmitter {
           handler.detach();
         }
         this.connections.delete(socket);
-        // Note: Don't call socket.removeAllListeners() here as it removes
-        // the pool's unlock handlers before they can fire, causing stuck locks
       };
 
       socket.once('close', cleanup);

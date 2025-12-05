@@ -1,6 +1,6 @@
 {
   "name": "pgserve",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "Multi-instance PostgreSQL embedded server using PGlite - zero config, auto-port allocation, perfect for development and embedded apps",
   "main": "src/index.js",
   "type": "module",
