@@ -373,11 +373,31 @@ const server = await startMultiTenantServer({
 
 ## Use Cases
 
+### Development & Testing
 - **Local Development** - PostgreSQL without Docker or system install
-- **Testing & CI/CD** - Fast, ephemeral databases per test run
-- **AI Agents** - Each agent gets isolated database
-- **Multi-Tenant Apps** - Auto-provision databases per tenant
-- **Prototyping** - Zero setup, just connect
+- **Integration Testing** - Real PostgreSQL for tests, not mocks or SQLite
+- **CI/CD Pipelines** - Spin up fresh databases per test run (GitHub Actions, GitLab CI)
+- **E2E Testing** - Isolated database for Playwright/Cypress test suites
+
+### AI & Agents
+- **AI Agent Memory** - Each agent gets isolated, concurrent-safe database
+- **LLM Tool Use** - Give AI models a real PostgreSQL to query
+- **RAG Applications** - Store embeddings with pgvector extension support
+
+### Multi-Tenant & SaaS
+- **Tenant Isolation** - Auto-provision database per tenant on first connection
+- **Demo Environments** - Instant sandboxed PostgreSQL for each demo user
+- **Microservices Dev** - Each service gets its own database instance
+
+### Edge & Embedded
+- **Raspberry Pi / IoT** - Full PostgreSQL on ARM devices
+- **Desktop Apps** - Electron apps with embedded PostgreSQL
+- **Offline-First** - Local database that syncs to cloud when online
+
+### Education & Prototyping
+- **Teaching SQL** - Students run real PostgreSQL without complex setup
+- **Hackathons** - Zero-config database in seconds
+- **Data Science** - Quick PostgreSQL for Jupyter notebooks
 
 ---
 
