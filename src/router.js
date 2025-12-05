@@ -14,6 +14,7 @@
 
 import net from 'net';
 import { PostgresManager } from './postgres.js';
+import { SyncManager } from './sync.js';
 import { extractDatabaseNameFromSocket } from './protocol.js';
 import { EventEmitter } from 'events';
 import pino from 'pino';
@@ -44,11 +45,19 @@ export class MultiTenantRouter extends EventEmitter {
       } : undefined
     });
 
-    // PostgreSQL manager
+    // Sync options (async replication to real PostgreSQL)
+    this.syncTo = options.syncTo || null;
+    this.syncDatabases = options.syncDatabases
+      ? options.syncDatabases.split(',').map(s => s.trim())
+      : [];
+    this.syncManager = null;
+
+    // PostgreSQL manager (with sync flag if needed)
     this.pgManager = new PostgresManager({
       dataDir: this.baseDir,
       port: this.pgPort,
-      logger: this.logger.child({ component: 'postgres' })
+      logger: this.logger.child({ component: 'postgres' }),
+      syncEnabled: !!this.syncTo  // Enable logical replication if sync is configured
     });
 
     // TCP server
@@ -80,6 +89,25 @@ export class MultiTenantRouter extends EventEmitter {
   async start() {
     // Start PostgreSQL first
     await this.pgManager.start();
+
+    // Initialize SyncManager if configured (async replication)
+    if (this.syncTo) {
+      this.syncManager = new SyncManager({
+        targetUrl: this.syncTo,
+        databases: this.syncDatabases,
+        sourcePort: this.pgPort,
+        sourceSocketPath: this.pgManager.getSocketPath(),
+        logLevel: this.logger.level
+      });
+
+      // Wire SyncManager to PostgresManager for database creation hooks
+      this.pgManager.setSyncManager(this.syncManager);
+
+      // Initialize sync connections (non-blocking, runs in background)
+      this.syncManager.initialize(this.pgManager)
+        .then(() => this.logger.info('Sync manager initialized'))
+        .catch(err => this.logger.warn({ err: err.message }, 'Sync manager initialization failed (non-fatal)'));
+    }
 
     return new Promise((resolve, reject) => {
       // Create TCP server
@@ -216,6 +244,11 @@ export class MultiTenantRouter extends EventEmitter {
       await new Promise((resolve) => {
         this.server.close(resolve);
       });
+    }
+
+    // Stop SyncManager first (before PostgreSQL)
+    if (this.syncManager) {
+      await this.syncManager.stop();
     }
 
     // Stop PostgreSQL

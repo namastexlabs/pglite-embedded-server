@@ -70,6 +70,20 @@ export class PostgresManager {
     this.creatingDatabases = new Map(); // Track in-progress creations
     this.socketDir = null; // Unix socket directory for faster local connections
     this.adminPool = null; // Connection pool for database admin operations
+
+    // Sync/Replication options (for async sync to real PostgreSQL)
+    this.syncEnabled = options.syncEnabled || false;
+    this.syncManager = null; // Will be set via setSyncManager()
+  }
+
+  /**
+   * Set the SyncManager for async replication
+   * Called after PostgresManager is created but before start()
+   * @param {SyncManager} syncManager
+   */
+  setSyncManager(syncManager) {
+    this.syncManager = syncManager;
+    this.syncEnabled = !!syncManager;
   }
 
   /**
@@ -250,6 +264,19 @@ export class PostgresManager {
         pgArgs.push('-k', ''); // Disable Unix socket on Windows
       }
 
+      // Add logical replication settings when sync is enabled
+      // These settings enable PostgreSQL's native WAL-based replication
+      // with ZERO hot path impact (handled by PostgreSQL's WAL writer process)
+      if (this.syncEnabled) {
+        pgArgs.push(
+          '-c', 'wal_level=logical',           // Enable logical decoding
+          '-c', 'max_replication_slots=10',    // Support multiple subscriptions
+          '-c', 'max_wal_senders=10',          // Parallel replication streams
+          '-c', 'wal_keep_size=512MB',         // Retain WAL for catchup
+        );
+        this.logger.info('Logical replication enabled for sync');
+      }
+
       this.process = spawn(this.binaries.postgres, pgArgs, {
         env: { ...process.env, LC_ALL: 'C', LANG: 'C' }
       });
@@ -331,6 +358,12 @@ export class PostgresManager {
       await client.query(`CREATE DATABASE ${client.escapeIdentifier(dbName)}`);
       this.createdDatabases.add(dbName);
       this.logger.info({ dbName }, 'Database created');
+
+      // Trigger async sync setup (non-blocking, doesn't affect hot path)
+      if (this.syncManager) {
+        this.syncManager.setupDatabaseSync(dbName)
+          .catch(err => this.logger.warn({ dbName, err: err.message }, 'Sync setup failed (non-fatal)'));
+      }
     } catch (error) {
       // Database might already exist (from previous persistent session or race condition)
       // 42P04 = duplicate_database, 23505 = unique_violation

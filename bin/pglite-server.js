@@ -48,6 +48,8 @@ OPTIONS:
   --cluster          Enable cluster mode (multi-core scaling)
   --workers <n>      Number of worker processes (default: CPU cores)
   --no-provision     Disable auto-provisioning of databases
+  --sync-to <url>    Sync to real PostgreSQL (async replication)
+  --sync-databases   Database patterns to sync (comma-separated, e.g. "myapp,tenant_*")
   --help             Show this help message
 
 MODES:
@@ -64,8 +66,11 @@ EXAMPLES:
   # Custom port
   pgserve --port 5433
 
-  # Custom port with persistence
-  pgserve --port 5433 --data /var/lib/pgserve
+  # Sync to real PostgreSQL (async replication)
+  pgserve --sync-to "postgresql://user:pass@host:5432/db"
+
+  # Sync specific databases
+  pgserve --sync-to "postgresql://..." --sync-databases "myapp,tenant_*"
 
 CONNECTING:
   # Any PostgreSQL client works (psql, pg, Prisma, etc.)
@@ -91,7 +96,9 @@ function parseArgs() {
     logLevel: 'info',
     autoProvision: true,
     cluster: false,
-    workers: null // null = use CPU count
+    workers: null, // null = use CPU count
+    syncTo: null,  // Sync target PostgreSQL URL
+    syncDatabases: null // Database patterns to sync (comma-separated)
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -128,6 +135,14 @@ function parseArgs() {
 
       case '--no-provision':
         options.autoProvision = false;
+        break;
+
+      case '--sync-to':
+        options.syncTo = args[++i];
+        break;
+
+      case '--sync-databases':
+        options.syncDatabases = args[++i];
         break;
 
       case '--help':
@@ -199,10 +214,17 @@ Press Ctrl+C to stop
         host: options.host,
         baseDir: options.dataDir,
         logLevel: options.logLevel,
-        autoProvision: options.autoProvision
+        autoProvision: options.autoProvision,
+        syncTo: options.syncTo,
+        syncDatabases: options.syncDatabases
       });
 
       server = router;
+
+      // Build sync status string
+      const syncStatus = options.syncTo
+        ? `Enabled → ${options.syncTo.replace(/:[^:@]+@/, ':***@')}`
+        : 'Disabled';
 
       console.log(`
 Server started successfully!
@@ -212,6 +234,7 @@ Server started successfully!
   Data:        ${memoryMode ? '(temp directory)' : options.dataDir}
   PostgreSQL:  Port ${router.pgPort} (internal)
   Auto-create: ${options.autoProvision ? 'Enabled' : 'Disabled'}
+  Sync:        ${syncStatus}${options.syncDatabases ? ` (${options.syncDatabases})` : ''}
 
 Examples:
   postgresql://${options.host}:${options.port}/myapp
