@@ -231,11 +231,18 @@ export async function startClusterServer(options = {}) {
       workers.set(worker.id, worker);
     }
 
-    // Restart dead workers
+    // Track shutdown state to prevent worker restart during shutdown
+    let shuttingDown = false;
+
+    // Restart dead workers (unless shutting down)
     cluster.on('exit', (worker, code, signal) => {
-      console.log(`[pgserve] Worker ${worker.id} died (${signal || code}), restarting...`);
       workers.delete(worker.id);
 
+      if (shuttingDown) {
+        return; // Don't restart during shutdown
+      }
+
+      console.log(`[pgserve] Worker ${worker.id} died (${signal || code}), restarting...`);
       const newWorker = cluster.fork({
         PGSERVE_WORKER: 'true',
         PGSERVE_PORT: String(port),
@@ -270,6 +277,7 @@ export async function startClusterServer(options = {}) {
       pgSocketPath,
       stop: async () => {
         console.log('[pgserve] Stopping cluster...');
+        shuttingDown = true; // Prevent worker restart during shutdown
         for (const worker of workers.values()) {
           worker.send({ type: 'shutdown' });
         }

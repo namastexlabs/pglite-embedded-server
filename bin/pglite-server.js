@@ -179,10 +179,13 @@ async function main() {
   const options = parseArgs();
   const memoryMode = !options.dataDir;
 
-  console.log(`
+  // Only print header if not a cluster worker (workers get PGSERVE_WORKER env)
+  if (!process.env.PGSERVE_WORKER) {
+    console.log(`
 pgserve - Embedded PostgreSQL Server
 =====================================
 `);
+  }
 
   try {
     let server;
