@@ -37,10 +37,12 @@ function getBinaryPaths() {
     throw new Error(`Unsupported platform: ${platform}-${arch}`);
   }
 
-  // Find the package in node_modules
+  // Find the package in node_modules (check multiple locations for npx/pnpm/npm compatibility)
   const possiblePaths = [
     path.join(process.cwd(), 'node_modules', pkgName, 'native', 'bin'),
     path.join(import.meta.dirname, '..', 'node_modules', pkgName, 'native', 'bin'),
+    path.join(import.meta.dirname, '..', '..', pkgName, 'native', 'bin'), // Hoisted (npx flat structure)
+    path.join(import.meta.dirname, '..', '..', '..', pkgName, 'native', 'bin'), // Extra level for some package managers
   ];
 
   for (const binDir of possiblePaths) {

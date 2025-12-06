@@ -1,6 +1,6 @@
 {
   "name": "pgserve",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Embedded PostgreSQL server with true concurrent connections - zero config, auto-provision databases",
   "main": "src/index.js",
   "type": "module",
@@ -13,6 +13,8 @@
     "lint": "eslint src/ bin/",
     "lint:fix": "eslint src/ bin/ --fix",
     "deadcode": "knip",
+    "test:npx": "scripts/test-npx.sh",
+    "prepublishOnly": "npm run lint && npm run deadcode && npm run test:npx",
     "prepare": "husky"
   },
   "keywords": [
