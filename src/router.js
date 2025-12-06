@@ -15,6 +15,8 @@
 import net from 'net';
 import { PostgresManager } from './postgres.js';
 import { SyncManager } from './sync.js';
+import { RestoreManager } from './restore.js';
+import { Dashboard } from './dashboard.js';
 import { extractDatabaseNameFromSocket } from './protocol.js';
 import { EventEmitter } from 'events';
 import pino from 'pino';
@@ -87,8 +89,53 @@ export class MultiTenantRouter extends EventEmitter {
    * Start multi-tenant router
    */
   async start() {
+    // Initialize dashboard for informative CLI output
+    const dashboard = new Dashboard();
+    dashboard.showHeader({
+      port: this.port,
+      host: this.host,
+      memoryMode: this.memoryMode,
+      syncTo: this.syncTo
+    });
+
     // Start PostgreSQL first
+    dashboard.stage('PostgreSQL binaries resolved');
     await this.pgManager.start();
+    dashboard.stage('PostgreSQL started');
+
+    // Automatic restore from external PostgreSQL (if sync configured)
+    // This runs BEFORE SyncManager to restore data before enabling outbound sync
+    if (this.syncTo) {
+      const restoreManager = new RestoreManager({
+        sourceUrl: this.syncTo,
+        patterns: this.syncDatabases,
+        targetPort: this.pgPort,
+        targetSocketPath: this.pgManager.getSocketPath(),
+        logger: this.logger.child({ component: 'restore' }),
+        onProgress: (metrics) => dashboard.updateRestore(metrics)
+      });
+
+      // Start restore progress display
+      dashboard.startRestore(restoreManager.totalDatabases || 1);
+
+      const restoreResult = await restoreManager.restore(this.pgManager);
+
+      if (restoreResult.success) {
+        dashboard.completeRestore(restoreResult.metrics);
+        this.logger.info({
+          databases: restoreResult.metrics.databasesRestored,
+          tables: restoreResult.metrics.tablesRestored,
+          rows: restoreResult.metrics.rowsRestored,
+          bytes: restoreResult.metrics.bytesTransferred,
+          durationMs: restoreResult.metrics.endTime - restoreResult.metrics.startTime
+        }, 'Restored from external PostgreSQL');
+      } else if (restoreResult.skipped) {
+        // No progress to complete - was skipped
+      } else {
+        dashboard.cleanup();
+        this.logger.warn({ error: restoreResult.error }, 'Restore failed (continuing without restored data)');
+      }
+    }
 
     // Initialize SyncManager if configured (async replication)
     if (this.syncTo) {
@@ -105,7 +152,10 @@ export class MultiTenantRouter extends EventEmitter {
 
       // Initialize sync connections (non-blocking, runs in background)
       this.syncManager.initialize(this.pgManager)
-        .then(() => this.logger.info('Sync manager initialized'))
+        .then(() => {
+          dashboard.stage('Sync manager initialized');
+          this.logger.info('Sync manager initialized');
+        })
         .catch(err => this.logger.warn({ err: err.message }, 'Sync manager initialization failed (non-fatal)'));
     }
 
@@ -130,6 +180,10 @@ export class MultiTenantRouter extends EventEmitter {
       // Start listening
       this.server.listen(this.port, this.host, () => {
         const socketPath = this.pgManager.getSocketPath();
+
+        dashboard.stage('TCP server listening');
+        dashboard.showReady({ port: this.port, host: this.host });
+
         this.logger.info({
           host: this.host,
           port: this.port,

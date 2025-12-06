@@ -31,18 +31,19 @@
   "homepage": "https://github.com/namastexlabs/pgserve#readme",
   "dependencies": {
     "pg": "^8.16.3",
+    "pg-copy-streams": "^7.0.0",
     "pino": "^10.1.0",
     "pino-pretty": "^13.1.2"
   },
   "optionalDependencies": {
-    "@embedded-postgres/linux-x64": "17.7.0-beta.15",
     "@embedded-postgres/darwin-arm64": "17.7.0-beta.15",
     "@embedded-postgres/darwin-x64": "17.7.0-beta.15",
+    "@embedded-postgres/linux-x64": "17.7.0-beta.15",
     "@embedded-postgres/win32-x64": "17.7.0-beta.15"
   },
   "devDependencies": {
-    "better-sqlite3": "^11.7.0",
-    "@electric-sql/pglite": "^0.2.17"
+    "@electric-sql/pglite": "^0.2.17",
+    "better-sqlite3": "^11.7.0"
   },
   "engines": {
     "node": ">=18.0.0"

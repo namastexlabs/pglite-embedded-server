@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.3.14
-        version: 0.3.14
-      '@electric-sql/pglite-socket':
-        specifier: ^0.0.19
-        version: 0.0.19(@electric-sql/pglite@0.3.14)
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+      pg-copy-streams:
+        specifier: ^7.0.0
+        version: 7.0.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -21,23 +21,45 @@ importers:
         specifier: ^13.1.2
         version: 13.1.2
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.2.17
+        version: 0.2.17
       better-sqlite3:
-        specifier: ^11.10.0
+        specifier: ^11.7.0
         version: 11.10.0
-      pg:
-        specifier: ^8.16.3
-        version: 8.16.3
+    optionalDependencies:
+      '@embedded-postgres/darwin-arm64':
+        specifier: 17.7.0-beta.15
+        version: 17.7.0-beta.15
+      '@embedded-postgres/darwin-x64':
+        specifier: 17.7.0-beta.15
+        version: 17.7.0-beta.15
+      '@embedded-postgres/linux-x64':
+        specifier: 17.7.0-beta.15
+        version: 17.7.0-beta.15
 
 packages:
 
-  '@electric-sql/pglite-socket@0.0.19':
-    resolution: {integrity: sha512-9Uq0aXJyfeQMQCk9OiX3dfjdKCKurjGPkhHemDo+sA5QeYPuH48Bxfue4sfA+dBXZGe9cUCjwrnZ351E3wPPIA==}
-    hasBin: true
-    peerDependencies:
-      '@electric-sql/pglite': 0.3.14
+  '@electric-sql/pglite@0.2.17':
+    resolution: {integrity: sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw==}
 
-  '@electric-sql/pglite@0.3.14':
-    resolution: {integrity: sha512-3DB258dhqdsArOI1fIt7cb9RpUOgcDg5hXWVgVHAeqVQ/qxtFy605QKs4gx6mFq3jWsSPqDN8TgSEsqC3OfV9Q==}
+  '@embedded-postgres/darwin-arm64@17.7.0-beta.15':
+    resolution: {integrity: sha512-yIo9ACgWI3U84lZpRD2G3ELzVM7fXCaTWCpH+9+lLeEj7+F9eTWYsG3DE/fcsPcDcDDxhLTqX71p9oFeX/KOZA==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@embedded-postgres/darwin-x64@17.7.0-beta.15':
+    resolution: {integrity: sha512-KXXBbiyJ8fNYNQt9ondhVUayQ0+qCi6Uoma23Oa40xoyzXY6kRNjXwlGB7Bvf9ZV8PsiBdlnEv/fSpYeRcDjSA==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@embedded-postgres/linux-x64@17.7.0-beta.15':
+    resolution: {integrity: sha512-HeaxSHsw6ccVh8l5iC4OgXqvaaCGWnnZR9CpgNgrAfnKPPGiEhUPBmO2XhEsFQIhc+ad/+36h0NTvKo4bdi40w==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [linux]
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -149,6 +171,9 @@ packages:
 
   pg-connection-string@2.9.1:
     resolution: {integrity: sha512-nkc6NpDcvPVpZXxrreI/FOtX3XemeLl8E0qFr6F2Lrm/I8WOnaWNhIPK2Z7OHpw7gh5XJThi6j6ppgNoaT1w4w==}
+
+  pg-copy-streams@7.0.0:
+    resolution: {integrity: sha512-zBvnY6wtaBRE2ae2xXWOOGMaNVPkXh1vhypAkNSKgMdciJeTyIQAHZaEeRAxUjs/p1El5jgzYmwG5u871Zj3dQ==}
 
   pg-int8@1.0.1:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
@@ -298,11 +323,16 @@ packages:
 
 snapshots:
 
-  '@electric-sql/pglite-socket@0.0.19(@electric-sql/pglite@0.3.14)':
-    dependencies:
-      '@electric-sql/pglite': 0.3.14
+  '@electric-sql/pglite@0.2.17': {}
 
-  '@electric-sql/pglite@0.3.14': {}
+  '@embedded-postgres/darwin-arm64@17.7.0-beta.15':
+    optional: true
+
+  '@embedded-postgres/darwin-x64@17.7.0-beta.15':
+    optional: true
+
+  '@embedded-postgres/linux-x64@17.7.0-beta.15':
+    optional: true
 
   '@pinojs/redact@0.4.0': {}
 
@@ -392,6 +422,8 @@ snapshots:
     optional: true
 
   pg-connection-string@2.9.1: {}
+
+  pg-copy-streams@7.0.0: {}
 
   pg-int8@1.0.1: {}
 
